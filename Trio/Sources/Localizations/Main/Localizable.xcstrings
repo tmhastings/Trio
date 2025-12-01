@@ -16297,6 +16297,9 @@
         }
       }
     },
+    "• Medtrum Nano (200u/300u)" : {
+
+    },
     "• Nightscout" : {
       "localizations" : {
         "bg" : {
@@ -136160,6 +136163,7 @@
       }
     },
     "Invalid CGM reading (HIGH)." : {
+      "extractionState" : "stale",
       "localizations" : {
         "bg" : {
           "stringUnit" : {
@@ -158067,6 +158071,9 @@
           }
         }
       }
+    },
+    "Medtrum Nano" : {
+
     },
     "Menu" : {
       "comment" : "Menu",
@@ -212843,6 +212850,7 @@
       }
     },
     "SMBs and Non-Zero Temp. Basal Rates are disabled." : {
+      "extractionState" : "stale",
       "localizations" : {
         "bg" : {
           "stringUnit" : {
