@@ -167,6 +167,9 @@ final class BaseAPSManager: APSManager, Injectable {
             }
         }
 
+        // Sync all settings files to the App Group for the Trio Settings Analyzer
+        storage.syncAllSettingsToAppGroup()
+
         deviceDataManager.recommendsLoop
             .receive(on: processQueue)
             .sink { [weak self] in

@@ -16,6 +16,7 @@ protocol FileStorage {
     func transaction(_ exec: (FileStorage) -> Void)
     func urlFor(file: String) -> URL?
     func parseOnFileSettingsToMgdL() -> Bool
+    func syncAllSettingsToAppGroup()
 }
 
 final class BaseFileStorage: FileStorage {
@@ -29,8 +30,19 @@ final class BaseFileStorage: FileStorage {
         OpenAPS.Settings.carbRatios,
         OpenAPS.Settings.bgTargets,
         OpenAPS.Settings.settings,
-        OpenAPS.Trio.settings,
+        OpenAPS.Trio.settings
     ]
+
+    /// Syncs all analyzer settings files to the App Group container.
+    /// Called once on launch so the analyzer has data even before the user changes a setting.
+    func syncAllSettingsToAppGroup() {
+        processQueue.async { [self] in
+            for name in Self.analyzerSyncFiles {
+                guard let data = try? Disk.retrieve(name, from: .documents, as: Data.self) else { continue }
+                syncToAppGroup(data: data, name: name)
+            }
+        }
+    }
 
     /// Copies a file to the App Group shared container so the Trio Settings Analyzer can read it.
     private func syncToAppGroup(data: Data, name: String) {
