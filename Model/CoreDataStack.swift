@@ -29,6 +29,28 @@ class CoreDataStack: ObservableObject {
 
         if inMemory {
             description.url = URL(fileURLWithPath: "/dev/null")
+        } else if let groupID = Bundle.main.appGroupSuiteName,
+                  let sharedURL = FileManager.default.containerURL(
+                      forSecurityApplicationGroupIdentifier: groupID
+                  ) {
+            let storeURL = sharedURL.appendingPathComponent("TrioCoreDataPersistentContainer.sqlite")
+
+            // Migrate existing store from default location to shared container on first launch
+            if !FileManager.default.fileExists(atPath: storeURL.path),
+               let defaultURL = description.url,
+               FileManager.default.fileExists(atPath: defaultURL.path) {
+                let fm = FileManager.default
+                let basePath = defaultURL.deletingPathExtension().path
+                for ext in ["sqlite", "sqlite-wal", "sqlite-shm"] {
+                    let src = basePath + "." + ext
+                    let dst = sharedURL.appendingPathComponent("TrioCoreDataPersistentContainer." + ext).path
+                    if fm.fileExists(atPath: src) {
+                        try? fm.copyItem(atPath: src, toPath: dst)
+                    }
+                }
+            }
+
+            description.url = storeURL
         }
 
         // Enable persistent store remote change notifications
