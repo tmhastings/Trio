@@ -21,13 +21,42 @@ protocol FileStorage {
 final class BaseFileStorage: FileStorage {
     private let processQueue = DispatchQueue.markedQueue(label: "BaseFileStorage.processQueue", qos: .utility)
 
+    /// Settings files that are mirrored to the App Group container for the Trio Settings Analyzer.
+    private static let analyzerSyncFiles: Set<String> = [
+        OpenAPS.Settings.preferences,
+        OpenAPS.Settings.basalProfile,
+        OpenAPS.Settings.insulinSensitivities,
+        OpenAPS.Settings.carbRatios,
+        OpenAPS.Settings.bgTargets,
+        OpenAPS.Settings.settings,
+        OpenAPS.Trio.settings,
+    ]
+
+    /// Copies a file to the App Group shared container so the Trio Settings Analyzer can read it.
+    private func syncToAppGroup(data: Data, name: String) {
+        guard Self.analyzerSyncFiles.contains(name),
+              let groupID = Bundle.main.appGroupSuiteName,
+              let containerURL = FileManager.default.containerURL(
+                  forSecurityApplicationGroupIdentifier: groupID
+              ) else { return }
+
+        let destURL = containerURL.appendingPathComponent("analyzer-settings/\(name)")
+        let destDir = destURL.deletingLastPathComponent()
+        try? FileManager.default.createDirectory(at: destDir, withIntermediateDirectories: true)
+        try? data.write(to: destURL, options: .atomic)
+    }
+
     func save<Value: JSON>(_ value: Value, as name: String) {
         processQueue.safeSync {
             do {
                 if let value = value as? RawJSON, let data = value.data(using: .utf8) {
                     try Disk.save(data, to: .documents, as: name)
+                    self.syncToAppGroup(data: data, name: name)
                 } else {
                     try Disk.save(value, to: .documents, as: name, encoder: JSONCoding.encoder)
+                    if let data = try? JSONCoding.encoder.encode(value) {
+                        self.syncToAppGroup(data: data, name: name)
+                    }
                 }
             } catch {
                 debug(.storage, "Failed to save file '\(name)': \(error)")
