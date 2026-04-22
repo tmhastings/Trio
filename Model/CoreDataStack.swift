@@ -29,28 +29,8 @@ class CoreDataStack: ObservableObject {
 
         if inMemory {
             description.url = URL(fileURLWithPath: "/dev/null")
-        } else if let groupID = Bundle.main.appGroupSuiteName,
-                  let sharedURL = FileManager.default.containerURL(
-                      forSecurityApplicationGroupIdentifier: groupID
-                  ) {
-            let storeURL = sharedURL.appendingPathComponent("TrioCoreDataPersistentContainer.sqlite")
-
-            // Migrate existing store from default location to shared container on first launch
-            if !FileManager.default.fileExists(atPath: storeURL.path),
-               let defaultURL = description.url,
-               FileManager.default.fileExists(atPath: defaultURL.path) {
-                let fm = FileManager.default
-                let basePath = defaultURL.deletingPathExtension().path
-                for ext in ["sqlite", "sqlite-wal", "sqlite-shm"] {
-                    let src = basePath + "." + ext
-                    let dst = sharedURL.appendingPathComponent("TrioCoreDataPersistentContainer." + ext).path
-                    if fm.fileExists(atPath: src) {
-                        try? fm.copyItem(atPath: src, toPath: dst)
-                    }
-                }
-            }
-
-            description.url = storeURL
+        } else {
+            Self.recoverFromAppGroupIfNeeded(defaultURL: description.url)
         }
 
         // Enable persistent store remote change notifications
@@ -77,6 +57,49 @@ class CoreDataStack: ObservableObject {
     deinit {
         if let observer = notificationToken {
             Foundation.NotificationCenter.default.removeObserver(observer)
+        }
+    }
+
+    /// One-time recovery: if a previous build moved the CoreData store to the App Group container,
+    /// copy it back to the default location so standard Trio can access current data.
+    private static func recoverFromAppGroupIfNeeded(defaultURL: URL?) {
+        guard let groupID = Bundle.main.appGroupSuiteName,
+              let containerURL = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: groupID),
+              let defaultURL = defaultURL
+        else { return }
+
+        let appGroupStoreURL = containerURL.appendingPathComponent("TrioCoreDataPersistentContainer.sqlite")
+        guard FileManager.default.fileExists(atPath: appGroupStoreURL.path) else { return }
+
+        let fm = FileManager.default
+        let shouldRestore: Bool
+        if !fm.fileExists(atPath: defaultURL.path) {
+            shouldRestore = true
+        } else if
+            let appGroupDate = (try? fm.attributesOfItem(atPath: appGroupStoreURL.path))?[.modificationDate] as? Date,
+            let defaultDate = (try? fm.attributesOfItem(atPath: defaultURL.path))?[.modificationDate] as? Date
+        {
+            shouldRestore = appGroupDate > defaultDate
+        } else {
+            shouldRestore = false
+        }
+
+        guard shouldRestore else { return }
+
+        do {
+            try NSPersistentStoreCoordinator.replaceStore(
+                at: defaultURL,
+                withPersistentStoreFrom: appGroupStoreURL,
+                ofType: NSSQLiteStoreType
+            )
+            let basePath = appGroupStoreURL.deletingPathExtension().path
+            for ext in ["sqlite", "sqlite-wal", "sqlite-shm"] {
+                let path = basePath + "." + ext
+                if fm.fileExists(atPath: path) { try? fm.removeItem(atPath: path) }
+            }
+            debug(.coreData, "Restored Core Data store from App Group \(DebuggingIdentifiers.succeeded)")
+        } catch {
+            debug(.coreData, "Failed to restore Core Data store from App Group: \(error) \(DebuggingIdentifiers.failed)")
         }
     }
 
