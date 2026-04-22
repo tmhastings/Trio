@@ -87,10 +87,18 @@ class CoreDataStack: ObservableObject {
         guard shouldRestore else { return }
 
         do {
-            try NSPersistentStoreCoordinator.replaceStore(
-                at: defaultURL,
-                withPersistentStoreFrom: appGroupStoreURL,
-                ofType: NSSQLiteStoreType
+            let tempCoordinator = NSPersistentStoreCoordinator(managedObjectModel: Self.managedObjectModel)
+            let store = try tempCoordinator.addPersistentStore(
+                ofType: NSSQLiteStoreType,
+                configurationName: nil,
+                at: appGroupStoreURL,
+                options: nil
+            )
+            _ = try tempCoordinator.migratePersistentStore(
+                store,
+                to: defaultURL,
+                options: nil,
+                withType: NSSQLiteStoreType
             )
             let basePath = appGroupStoreURL.deletingPathExtension().path
             for ext in ["sqlite", "sqlite-wal", "sqlite-shm"] {
